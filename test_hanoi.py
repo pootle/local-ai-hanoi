@@ -2,7 +2,6 @@
 
 import io
 import random
-import resource
 import shutil
 import subprocess
 import sys
@@ -11,6 +10,11 @@ import time
 from collections import deque
 from itertools import product
 from pathlib import Path
+
+try:
+    import resource
+except ImportError:
+    resource = None
 
 import hanoi
 
@@ -266,9 +270,11 @@ def test_scale():
                        check=True, capture_output=True)
         solved_in = time.monotonic() - t0
         assert outp.read_text() == ""
-        peak_mb = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024
-        print(f"    500k already-solved pieces: {solved_in:.2f}s, peak {peak_mb:.0f} MB")
-        assert peak_mb < 300
+        peak_mb = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024 if resource else None
+        peak = f", peak {peak_mb:.0f} MB" if peak_mb is not None else ""
+        print(f"    500k already-solved pieces: {solved_in:.2f}s{peak}")
+        if peak_mb is not None:
+            assert peak_mb < 300
 
         b = " ".join(map(str, range(n - 19, n + 1, 2)))
         c = " ".join(map(str, range(n - 18, n + 1, 2)))
@@ -299,10 +305,11 @@ def test_scale():
         assert outp.stat().st_size == 3 * (2**25 - 1)
         error = replay_stream(25, bytearray(26), 1, outp)
         assert error is None, error
-        peak_mb = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024
-        print(f"    25-piece classical, {2**25 - 1} moves: {classic_in:.2f}s, "
-              f"peak {peak_mb:.0f} MB")
-        assert peak_mb < 1536
+        peak_mb = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024 if resource else None
+        peak = f", peak {peak_mb:.0f} MB" if peak_mb is not None else ""
+        print(f"    25-piece classical, {2**25 - 1} moves: {classic_in:.2f}s{peak}")
+        if peak_mb is not None:
+            assert peak_mb < 1536
 
         # 28 pieces: 268,435,455 moves (~805 MB); only run with room to
         # spare, and verify without a full Python replay (spot checks).

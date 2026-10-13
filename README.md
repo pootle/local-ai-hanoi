@@ -35,7 +35,7 @@ opencode 1.1.23
 
 ## Requirements
 
-Python 3, no dependencies.
+Python 3, no dependencies. Works on Linux, macOS and Windows.
 
 ## Usage
 
@@ -129,7 +129,10 @@ By default it listens on all network interfaces, so any other machine on
 the local network can open `http://<server's IP>:8000/` — the LAN address
 is printed on startup. Use `python3 hanoi_web.py --local` to restrict
 access to the machine itself. (If the server PC's firewall asks whether to
-allow the connection, say yes for private networks.)
+allow the connection, say yes for private networks; on Windows the prompt
+appears the first time the server starts.) If the chosen port happens to
+be in use or inside a Hyper-V excluded port range on Windows, pass a
+different one.
 
 The page starts with a fresh classic game (8 pieces, A → C). The board is
 drawn as SVG discs on three towers; **Play** animates the optimal solution
@@ -161,6 +164,22 @@ batching and offsets, resuming from arbitrary positions, session expiry,
 input validation, and agreement of every served batch with the reference
 generator.
 
+### Minimal install
+
+To run the web service on another machine, copy just two files from this
+repo into any folder: `hanoi_web.py` and `hanoi.py` (the solver it
+imports). No package manager, no dependencies:
+
+```
+python hanoi_web.py 8000      # Windows
+python3 hanoi_web.py 8000     # Linux / macOS
+```
+
+Then open http://127.0.0.1:8000/ on that machine, or
+http://<that machine's IP>:8000/ from any other machine on the network.
+Everything else in this repo — the tests, `orig_hanoi.py`, examples and
+docs — is not needed to run the service.
+
 ## `orig_hanoi.py`
 
 `orig_hanoi.py` is the original, minimal implementation, kept for reference.
@@ -183,4 +202,5 @@ sampled up to n = 11), classical 2ⁿ−1 move counts, byte-for-byte agreement
 of the fast streaming writer with the reference generator, the example
 above, invalid-input handling, and scale runs (500,000 pieces; a fully
 replayed 25-piece classical run; a 28-piece / 805 MB run when there is
-disk space).
+disk space). On Windows the standard `resource` module is unavailable, so
+`test_scale` omits the peak-RAM figures; everything else is identical.
