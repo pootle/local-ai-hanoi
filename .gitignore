@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 *_out.txt
 test1*
+token.txt
