@@ -147,6 +147,15 @@ one move at a time, with the speed slider ranging from 0.2 to 4 moves/s.
   solution from wherever the pieces are. The cursor reflects the mode: an
   arrow over the board while the computer is playing; a pointer over the
   towers when paused.
+- **Auto-resume** (Off / 10 s / 30 s / 60 s; default 30 s, the choice is
+  remembered) makes the computer start playing again once you have been
+  idle for that long — after **Stop**, after manual moves, or after a new
+  game starts. The countdown shows in the status bar; any interaction with
+  the board or the controls restarts it, and opening the new-game dialog
+  pauses it (closing the dialog restarts the full countdown).
+- When a game is solved — by the computer or by hand — the page waits
+  20 seconds and then starts a new classic game with a random number of
+  pieces between 5 and 11, on the same target tower.
 - The header offers three colour themes (light / dark / grey); the choice
   is remembered.
 

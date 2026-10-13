@@ -292,7 +292,7 @@ button:disabled { opacity: .45; cursor: default; }
 .themes button { border: 0; border-radius: 0; padding: 7px 11px; }
 .themes button.active { background: var(--muted); color: var(--bg); }
 .speed { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
-.speed input { accent-color: var(--accent); }
+.speed input, .speed select { accent-color: var(--accent); }
 main { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 0 16px 18px; }
 svg#board { width: 100%; max-width: 960px; height: auto; background: var(--board); border-radius: 14px; box-shadow: 0 1px 4px var(--shadow); }
 #statusbar { display: flex; gap: 16px; align-items: baseline; margin-top: 10px; min-height: 22px; font-size: 14px; flex-wrap: wrap; justify-content: center; }
@@ -335,6 +335,14 @@ dialog menu { padding: 0; margin: 14px 0 0; display: flex; justify-content: flex
     <label class="speed">Speed
       <input id="speed" type="range" min="0" max="1000" value="537">
       <span id="speedLabel"></span>
+    </label>
+    <label class="speed" title="The computer resumes automatically after this idle time; Off disables it">Auto-resume
+      <select id="resume">
+        <option value="0">Off</option>
+        <option value="10">10 s</option>
+        <option value="30" selected>30 s</option>
+        <option value="60">60 s</option>
+      </select>
     </label>
     <div class="themes" role="group" aria-label="Color theme">
       <button data-theme-btn="light">Light</button>
@@ -402,6 +410,9 @@ let rate = 1;
 let inflight = null;
 let gen = 0;
 let statusTimer = 0;
+let autopilot = null;
+let resumeAfter = 30;
+const NEWGAME_DELAY = 20;
 
 function api(path, body) {
   return fetch(path, {
@@ -485,10 +496,26 @@ function isSolved() {
   return state.towers.every((tw, t) => t === state.target || tw.length === 0);
 }
 
-function idleText() {
-  if (isSolved()) return "Solved.";
+function baseText() {
+  if (isSolved()) return state.total === 0
+    ? "Already solved \u2014 start another game."
+    : `Solved in ${state.moveCount} moves.`;
   if (state.mode === "auto") return "Solving\u2026";
+  if (state.selected >= 0) return `Piece ${state.selected} selected \u2014 click a tower to move it, or click the tower again to cancel.`;
   return "Stopped \u2014 click a piece, then a tower to move it, or press Play.";
+}
+
+function countdownSuffix() {
+  if (!autopilot) return "";
+  const secs = Math.max(0, Math.ceil((autopilot.at - Date.now()) / 1000));
+  return autopilot.kind === "resume" ? ` Auto-resumes in ${secs}s.` : ` New game in ${secs}s.`;
+}
+
+function refreshStatus() {
+  const s = $("status");
+  if (s.dataset.flash) return;
+  s.classList.remove("error");
+  s.textContent = baseText() + countdownSuffix();
 }
 
 function setStatus(msg, isError) {
@@ -508,10 +535,53 @@ function flash(msg) {
   statusTimer = setTimeout(() => {
     if (s.dataset.flash) {
       delete s.dataset.flash;
-      s.classList.remove("error");
-      s.textContent = idleText();
+      refreshStatus();
     }
   }, 2600);
+}
+
+function clearAutopilot() {
+  if (!autopilot) return;
+  clearTimeout(autopilot.timer);
+  clearInterval(autopilot.tick);
+  autopilot = null;
+}
+
+function schedule(kind, seconds) {
+  clearAutopilot();
+  if (!seconds || seconds <= 0) return;
+  const at = Date.now() + seconds * 1000;
+  autopilot = { kind, at, timer: 0, tick: 0 };
+  autopilot.timer = setTimeout(fireAutopilot, seconds * 1000);
+  autopilot.tick = setInterval(refreshStatus, 1000);
+  refreshStatus();
+}
+
+function fireAutopilot() {
+  if (!autopilot) return;
+  const kind = autopilot.kind;
+  clearAutopilot();
+  if ($("newGame").open) return;
+  if (kind === "resume") {
+    if (state.mode === "paused" && !state.anim && !isSolved()) play();
+  } else if (isSolved()) {
+    startNewRandomGame();
+  }
+}
+
+function startNewRandomGame() {
+  const pieces = 5 + Math.floor(Math.random() * 7);
+  api("/api/game", { kind: "classic", pieces, target: "ABC"[state.target] })
+    .then(startGame)
+    .catch((err) => {
+      flash(`Cannot start a new game: ${err.message}`);
+      schedule("newgame", NEWGAME_DELAY);
+    });
+}
+
+function noteActivity() {
+  if (state.mode !== "paused" || state.anim || isSolved() || $("newGame").open) return;
+  schedule("resume", resumeAfter);
 }
 
 function updateHud() {
@@ -525,6 +595,7 @@ function updateButtons() {
   $("board").classList.toggle("playing", state.mode === "auto");
   $("playBtn").textContent = state.mode === "auto" ? "Stop" : "Play";
   $("playBtn").disabled = isSolved();
+  refreshStatus();
 }
 
 function applyMove(fromT, toT) {
@@ -640,8 +711,8 @@ function onSolved() {
   state.mode = "paused";
   state.selected = -1;
   renderDiscs();
+  schedule("newgame", NEWGAME_DELAY);
   updateButtons();
-  setStatus(`Solved in ${state.moveCount} moves.`);
 }
 
 function fail(msg) {
@@ -653,6 +724,7 @@ function fail(msg) {
     state.anim.el.remove();
     state.anim = null;
   }
+  clearAutopilot();
   renderDiscs();
   updateButtons();
   flash(msg);
@@ -661,6 +733,7 @@ function fail(msg) {
 function play() {
   if (state.mode === "auto" || state.anim) return;
   if (isSolved()) { flash("Already solved \u2014 start a new game."); return; }
+  clearAutopilot();
   state.mode = "auto";
   state.selected = -1;
   renderDiscs();
@@ -679,8 +752,8 @@ function stop() {
     state.selected = -1;
     state.stale = true;
   }
+  noteActivity();
   updateButtons();
-  setStatus(idleText());
 }
 
 function towerOf(piece) {
@@ -699,13 +772,15 @@ function attemptMove(fromT, toT) {
     flash(`Illegal: piece ${piece} cannot be placed on top of smaller piece ${top} (tower ${TOWERS[toT]}).`);
     const elm = $("discs").querySelector(`[data-piece="${top}"]`);
     if (elm) shakeEl(elm);
+    noteActivity();
     return;
   }
   state.selected = -1;
   animateMove(fromT, toT, 320, () => {
     applyMove(fromT, toT);
     state.stale = true;
-    setStatus(isSolved() ? `Solved in ${state.moveCount} moves.` : idleText());
+    if (isSolved()) schedule("newgame", NEWGAME_DELAY);
+    else schedule("resume", resumeAfter);
     updateButtons();
   });
 }
@@ -724,9 +799,8 @@ $("board").addEventListener("click", (e) => {
     const topPiece = state.towers[t][state.towers[t].length - 1];
     state.selected = topPiece === state.selected ? -1 : topPiece;
     renderDiscs();
-    setStatus(state.selected >= 0
-      ? `Piece ${state.selected} selected \u2014 click a tower to move it, or click the tower again to cancel.`
-      : idleText());
+    noteActivity();
+    refreshStatus();
     return;
   }
   if (state.selected < 0) return;
@@ -735,7 +809,8 @@ $("board").addEventListener("click", (e) => {
   if (st === t) {
     state.selected = -1;
     renderDiscs();
-    setStatus(idleText());
+    noteActivity();
+    refreshStatus();
     return;
   }
   attemptMove(st, t);
@@ -787,11 +862,13 @@ function startGame(g) {
   state.stale = false;
   state.mode = "paused";
   state.selected = -1;
+  clearAutopilot();
+  if (g.total === 0) schedule("newgame", NEWGAME_DELAY);
+  else schedule("resume", resumeAfter);
   renderStatic();
   renderDiscs();
   updateButtons();
   updateHud();
-  setStatus(g.total === 0 ? "Already solved \u2014 start another game." : idleText());
 }
 
 function rateFromSlider(v) { return 0.2 * Math.pow(20, v / 1000); }
@@ -805,6 +882,25 @@ function updateSpeedLabel() {
 $("speed").addEventListener("input", (e) => {
   rate = rateFromSlider(+e.target.value);
   updateSpeedLabel();
+  if (autopilot) schedule(autopilot.kind, autopilot.kind === "resume" ? resumeAfter : NEWGAME_DELAY);
+});
+
+$("resume").addEventListener("change", () => {
+  resumeAfter = +$("resume").value;
+  try { localStorage.setItem("hanoi-autoresume", String(resumeAfter)); } catch (err) { /* private mode */ }
+  if ($("newGame").open || state.anim || state.mode !== "paused" || isSolved()) return;
+  if (resumeAfter > 0) schedule("resume", resumeAfter);
+  else { clearAutopilot(); refreshStatus(); }
+});
+
+$("newGame").addEventListener("open", () => {
+  clearAutopilot();
+});
+
+$("newGame").addEventListener("close", () => {
+  if (state.mode === "auto" || state.anim) return;
+  if (isSolved()) schedule("newgame", NEWGAME_DELAY);
+  else if (resumeAfter > 0) schedule("resume", resumeAfter);
 });
 
 function setTheme(t) {
@@ -845,9 +941,15 @@ $("newForm").addEventListener("submit", (e) => {
 
 (function init() {
   let theme = null;
-  try { theme = localStorage.getItem("hanoi-theme"); } catch (err) { /* private mode */ }
+  let savedResume = null;
+  try {
+    theme = localStorage.getItem("hanoi-theme");
+    savedResume = localStorage.getItem("hanoi-autoresume");
+  } catch (err) { /* private mode */ }
   if (!theme) theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   setTheme(theme);
+  if (savedResume !== null && ["0", "10", "30", "60"].includes(savedResume)) $("resume").value = savedResume;
+  resumeAfter = +$("resume").value;
   rate = rateFromSlider(+$("speed").value);
   updateSpeedLabel();
   api("/api/game", { kind: "classic", pieces: 8, target: "C" })
