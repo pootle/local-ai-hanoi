@@ -32,6 +32,10 @@ _SINK_SIZE = 4 << 20
 _MAX_CAP_LEVEL = 25  # keeps peak memory under ~1 GB even for huge --chunk
 
 
+class HanoiError(ValueError):
+    """Invalid game input; the CLI reports it via die(), the web API as 400."""
+
+
 def die(message):
     print(f"hanoi: {message}", file=sys.stderr)
     sys.exit(1)
@@ -49,9 +53,9 @@ def parse_tower_line(line, name):
             else:
                 lo = hi = int(token)
         except ValueError:
-            die(f"tower {name}: malformed entry {token!r}")
+            raise HanoiError(f"tower {name}: malformed entry {token!r}")
         if lo < 1 or hi < lo:
-            die(f"tower {name}: malformed entry {token!r}")
+            raise HanoiError(f"tower {name}: malformed entry {token!r}")
         pieces.extend(range(lo, hi + 1))
     return pieces
 
@@ -65,11 +69,11 @@ def load_input(path):
     while lines and not lines[-1].strip():
         lines.pop()
     if len(lines) > 4:
-        die("input must have 4 lines: target tower, then towers A, B and C")
+        raise HanoiError("input must have 4 lines: target tower, then towers A, B and C")
     lines += [""] * (4 - len(lines))
     target = lines[0].strip().upper()
     if target not in "ABC":
-        die(f"target tower must be A, B or C, got {lines[0].strip()!r}")
+        raise HanoiError(f"target tower must be A, B or C, got {lines[0].strip()!r}")
     towers = [parse_tower_line(lines[i], name) for i, name in enumerate("ABC", 1)]
     return "ABC".index(target), towers
 
@@ -80,11 +84,11 @@ def build_pegs(towers):
     for tower, pieces in enumerate(towers):
         for piece in pieces:
             if pegs[piece]:
-                die(f"piece {piece} is listed on more than one tower")
+                raise HanoiError(f"piece {piece} is listed on more than one tower")
             pegs[piece] = tower + 1
     for piece in range(1, n + 1):
         if not pegs[piece]:
-            die(f"piece {piece} is missing from all towers")
+            raise HanoiError(f"piece {piece} is missing from all towers")
         pegs[piece] -= 1
     return n, pegs
 
@@ -120,6 +124,38 @@ def generate_moves(n, pegs, target):
             push((CLASSICAL, piece + 1, a, t, f))
             push((MOVE, piece, f, t))
             push((CLASSICAL, piece + 1, f, a, t))
+
+def count_moves(n, pegs, target):
+    # Number of moves in the optimal solution without generating it: a
+    # classical block of m pieces always takes 2^m - 1 moves, so blocks
+    # are counted instead of expanded (O(n) even for huge n).
+    count = 0
+    stack = [(SOLVE, 1, target)]
+    push, pop = stack.append, stack.pop
+    while stack:
+        task = pop()
+        kind = task[0]
+        if kind == MOVE:
+            count += 1
+        elif kind == SOLVE:
+            piece, t = task[1], task[2]
+            if piece > n:
+                continue
+            p = pegs[piece]
+            if p == t:
+                push((SOLVE, piece + 1, t))
+            else:
+                q = 3 - p - t
+                push((CLASSICAL, piece + 1, q, t, p))
+                push((MOVE, piece, p, t))
+                push((SOLVE, piece + 1, q))
+        else:
+            piece = task[1]
+            if piece > n:
+                continue
+            count += (1 << (n - piece + 1)) - 1
+    return count
+
 
 def _build_level(m):
     # The six orientations of the classical block of m pieces, each as one
@@ -246,8 +282,11 @@ def main(argv):
         args = args[2:]
     if len(args) != 2:
         die(f"usage: python3 {argv[0]} [--chunk <MB>] <input_file> <output_file>")
-    target, towers = load_input(args[0])
-    n, pegs = build_pegs(towers)
+    try:
+        target, towers = load_input(args[0])
+        n, pegs = build_pegs(towers)
+    except HanoiError as e:
+        die(str(e))
     try:
         with open(args[1], "wb", buffering=0) as out:
             write_moves(n, pegs, target, out, chunk_mb)

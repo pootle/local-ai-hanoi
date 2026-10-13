@@ -172,6 +172,29 @@ def test_classical_counts():
         assert error is None, error
 
 
+def test_count_moves():
+    # Classical position (full stack on A): 2^n - 1 to B or C, 0 to A.
+    for n in (1, 2, 3, 20, 40):
+        pegs = bytearray(n + 1)
+        assert hanoi.count_moves(n, pegs, 0) == 0
+        assert hanoi.count_moves(n, pegs, 1) == (1 << n) - 1
+        assert hanoi.count_moves(n, pegs, 2) == (1 << n) - 1
+    # Already on tower C: 0 moves to C, a full classical re-stack elsewhere.
+    pegs = bytearray(9)
+    pegs[1:] = bytes([2]) * 8
+    assert hanoi.count_moves(8, pegs, 2) == 0
+    assert hanoi.count_moves(8, pegs, 0) == (1 << 8) - 1
+    # Random positions: must equal the reference generator's move count.
+    rng = random.Random(20261014)
+    for _ in range(400):
+        n = rng.randint(0, 14)
+        pegs = random_pegs(n, rng)
+        for t in range(3):
+            got = hanoi.count_moves(n, pegs, t)
+            want = sum(1 for _ in hanoi.generate_moves(n, bytes(pegs), t))
+            assert got == want, f"n={n} t={t} pegs={bytes(pegs[1:])}: {got} != {want}"
+
+
 def test_fast_block_matches_reference():
     # The fast path precomputes classical blocks as bytes; every block must
     # decode to exactly the moves the reference generator produces.

@@ -3,7 +3,8 @@
 A command-line program that solves the Towers of Hanoi from an
 **arbitrary starting position**. Given the pieces on the three towers and a
 target tower, it produces the (optimal) list of moves that ends with all
-pieces correctly stacked on the target tower.
+pieces correctly stacked on the target tower. There is also an animated
+web front end for playing with positions by hand (see below).
 
 ## AI coding
 
@@ -114,6 +115,51 @@ Typical timings on a modern laptop (page-cache writes):
 | 500,000 pieces, scattered | 748,982 | 2.2 MB | 0.08 s |
 | 25 pieces, full stack | 33,554,431 | 100 MB | 0.20 s |
 | 28 pieces, full stack | 268,435,455 | 805 MB | 0.31 s (~870 M moves/s) |
+
+## Web animation
+
+`hanoi_web.py` serves an animated version of the same solver in a web
+browser. No dependencies and no build step:
+
+```
+python3 hanoi_web.py [port]        # default 8000
+```
+
+By default it listens on all network interfaces, so any other machine on
+the local network can open `http://<server's IP>:8000/` — the LAN address
+is printed on startup. Use `python3 hanoi_web.py --local` to restrict
+access to the machine itself. (If the server PC's firewall asks whether to
+allow the connection, say yes for private networks.)
+
+The page starts with a fresh classic game (8 pieces, A → C). The board is
+drawn as SVG discs on three towers; **Play** animates the optimal solution
+one move at a time, with the speed slider ranging from 0.2 to 4 moves/s.
+
+- **New game** starts a classic game (1–32 pieces, any target tower) or a
+  custom starting position — the same piece-list syntax as the file input,
+  one line per tower.
+- **Stop** pauses mid-solution. You can then move pieces by hand: click a
+  piece (only the top of each tower is selectable), then click a tower.
+  Illegal moves are rejected. **Play** again resumes the optimal solution
+  from wherever the pieces are.
+- The header offers three colour themes (light / dark / grey); the choice
+  is remembered.
+
+The browser never holds the whole solution: the page asks the server for
+batches of 256 moves at a time, and after any manual move it sends the
+current position back so the server re-solves from there. The piece count
+is capped at 32 for rendering; for big jobs use `hanoi.py` as before.
+
+The front end has its own tests:
+
+```
+python3 test_hanoi_web.py
+```
+
+which start a throwaway server and exercise the JSON API end to end —
+batching and offsets, resuming from arbitrary positions, session expiry,
+input validation, and agreement of every served batch with the reference
+generator.
 
 ## `orig_hanoi.py`
 
