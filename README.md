@@ -5,6 +5,33 @@ A command-line program that solves the Towers of Hanoi from an
 target tower, it produces the (optimal) list of moves that ends with all
 pieces correctly stacked on the target tower.
 
+## AI coding
+
+This was written using local LLM as an experiment to compare with other online AIs.
+For the original (minimal RAM version):
+
+```
+Plan phase took 3m 33s
+build phase took 4m 53s
+```
+
+[The prompt is here](prompt.md)
+
+A couple of questions from the AI were also asked and answered during planning.
+
+### HW spec
+
+PC (built before the great price hikes fortunately!)
+- GPU nvidia 5090 
+- CPU: AMD Ryzen 9 9950X3D
+- RAM: 128GB
+
+### SW spec
+
+Using qwen3.8 27b with 6bit quantization. 
+Context set to 128k. k & v set to use 8 bit int rather than 16bit float.
+opencode 1.1.23
+
 ## Requirements
 
 Python 3, no dependencies.
