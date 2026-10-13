@@ -399,6 +399,7 @@ const state = {
 let GEO = { unit: 25, discH: 22 };
 let rate = 1;
 let inflight = null;
+let gen = 0;
 let statusTimer = 0;
 
 function api(path, body) {
@@ -582,15 +583,17 @@ function animateMove(fromT, toT, ms, done) {
 
 async function fetchBatch() {
   if (inflight) return inflight;
+  const g = gen;
   inflight = (async () => {
     try {
       const res = await api("/api/moves", { id: state.sid, offset: state.offset, limit: BATCH });
+      if (g !== gen) return;
       state.offset = res.offset;
       state.total = res.total;
       state.queue.push(...res.moves);
       updateHud();
     } finally {
-      inflight = null;
+      if (g === gen) inflight = null;
     }
   })();
   return inflight;
@@ -598,9 +601,11 @@ async function fetchBatch() {
 
 async function resync() {
   if (inflight) await inflight;
+  const g = gen;
   state.stale = false;
   state.queue.length = 0;
   const res = await api("/api/moves", { towers: state.towers, target: "ABC"[state.target], limit: BATCH });
+  if (g !== gen) return;
   state.sid = res.id;
   state.offset = res.offset;
   state.total = res.total;
@@ -610,15 +615,13 @@ async function resync() {
 
 async function tick() {
   if (state.mode !== "auto" || state.anim) return;
-  if (state.queue.length === 0) {
-    if (state.stale) {
-      try { await resync(); } catch (err) { return fail(err.message); }
-    }
+  if (state.stale) {
+    try { await resync(); } catch (err) { return fail(err.message); }
     if (state.mode !== "auto") return;
-    if (state.queue.length === 0) {
-      if (state.offset >= state.total) return onSolved();
-      try { await fetchBatch(); } catch (err) { return fail(err.message); }
-    }
+  }
+  if (state.queue.length === 0) {
+    if (state.offset >= state.total) return onSolved();
+    try { await fetchBatch(); } catch (err) { return fail(err.message); }
     if (state.mode !== "auto") return;
     if (state.queue.length === 0) return onSolved();
   }
@@ -774,6 +777,7 @@ function startGame(g) {
     state.anim.el.remove();
     state.anim = null;
   }
+  gen++;
   inflight = null;
   state.n = g.n;
   state.towers = g.towers;

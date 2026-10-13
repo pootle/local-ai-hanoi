@@ -169,6 +169,107 @@ def test_full_playthrough():
     assert towers[2] == list(range(1, n + 1)) and not towers[0] and not towers[1]
 
 
+def test_pause_manual_move_resume():
+    # Mirrors the browser's move-queue state machine from hanoi_web.py:
+    # a prefetched queue, a stale flag, and the tick() rule that a stale
+    # position must be resynced *before* the queue is consumed. Issue #1:
+    # after stop + manual move the (non-empty) queue of stale moves was
+    # still played, producing illegal moves.
+    limit = 256  # mirrors the browser's BATCH
+    n = 10  # pieces 1..10 in the custom position below
+
+    class Client:
+        def __init__(self, g, legacy):
+            self.towers = [list(t) for t in g["towers"]]
+            self.sid, self.offset, self.total = g["id"], 0, g["total"]
+            self.queue, self.stale = [], False
+            self.legacy = legacy
+
+        def fetch(self):
+            d = _fetch(sid=self.sid, offset=self.offset, limit=limit)
+            self.offset, self.total = d["offset"], d["total"]
+            self.queue.extend(d["moves"])
+
+        def resync(self):
+            d = _fetch(towers=self.towers, limit=limit, target="C")
+            self.sid, self.offset, self.total = d["id"], d["offset"], d["total"]
+            self.stale = False
+            self.queue = list(d["moves"])
+
+        def apply(self, mv):
+            s, d = "ABC".index(mv[0]), "ABC".index(mv[1])
+            src, dst = self.towers[s], self.towers[d]
+            assert src, f"illegal {mv}: source tower is empty"
+            assert not dst or src[-1] > dst[-1], \
+                f"illegal {mv}: piece {src[-1]} onto smaller piece {dst[-1]}"
+            dst.append(src.pop())
+
+        def tick(self):
+            if self.legacy:
+                if not self.queue:
+                    if self.stale:
+                        self.resync()
+                    if not self.queue:
+                        if self.offset >= self.total:
+                            return "solved"
+                        self.fetch()
+                    if not self.queue:
+                        return "solved"
+            else:
+                if self.stale:
+                    self.resync()
+                if not self.queue:
+                    if self.offset >= self.total:
+                        return "solved"
+                    self.fetch()
+                if not self.queue:
+                    return "solved"
+            self.apply(self.queue.pop(0))
+            return None
+
+    def run(legacy, stop_after, manual=None):
+        g = _game(kind="custom", a="1 4 7 10", b="2 5 8", c="3 6 9", target="C")
+        c = Client(g, legacy)
+        for _ in range(stop_after):
+            assert c.tick() != "solved"
+        if manual is None:
+            return c  # the "stopped" position, mid-queue
+        s, d = "ABC".index(manual[0]), "ABC".index(manual[1])
+        c.towers[d].append(c.towers[s].pop())
+        c.stale = True  # the browser sets stale; the queue is kept
+        for _ in range(20000):
+            if c.tick() == "solved":
+                return c
+        raise AssertionError("run did not terminate")
+
+    stop_after = 3 * limit // 2
+    c = run(False, stop_after)
+    assert 0 < len(c.queue) < limit, "queue must be mid-drained at stop"
+    old_next = c.queue[0]
+    candidates = []
+    for f in range(3):
+        for t in range(3):
+            if f == t or not c.towers[f]:
+                continue
+            if (not c.towers[t] or c.towers[f][-1] > c.towers[t][-1]) \
+                    and "ABC"[f] + "ABC"[t] != old_next:
+                candidates.append("ABC"[f] + "ABC"[t])
+    assert candidates, "expected a legal manual move other than the queued one"
+
+    for manual in candidates:
+        solved = run(False, stop_after, manual)
+        assert solved.towers[2] == list(range(1, n + 1)) \
+            and not solved.towers[0] and not solved.towers[1], \
+            "fixed tick order must resync and solve after a manual move"
+        try:
+            run(True, stop_after, manual)
+        except AssertionError as e:
+            assert "illegal" in str(e)
+            break
+    else:
+        raise AssertionError("no manual move reproduced the stale-queue bug")
+
+
 def test_session_eviction():
     sids = [_game(kind="classic", pieces=2, target="C")["id"]
             for _ in range(hanoi_web.MAX_SESSIONS + 1)]
@@ -222,6 +323,7 @@ def main():
         test_spec_example_resync,
         test_manual_moves_resume,
         test_full_playthrough,
+        test_pause_manual_move_resume,
         test_session_eviction,
         test_offset_mismatch_and_unknown_session,
         test_limit_clamped,
