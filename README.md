@@ -141,10 +141,12 @@ one move at a time, with the speed slider ranging from 0.2 to 4 moves/s.
 - **New game** starts a classic game (1–32 pieces, any target tower) or a
   custom starting position — the same piece-list syntax as the file input,
   one line per tower.
-- **Stop** pauses mid-solution. You can then move pieces by hand: click a
-  piece (only the top of each tower is selectable), then click a tower.
-  Illegal moves are rejected. **Play** again resumes the optimal solution
-  from wherever the pieces are.
+- **Stop** pauses mid-solution. You can then move pieces by hand: click
+  anywhere on a tower to pick up its top piece, then click a tower to drop
+  it there. Illegal moves are rejected. **Play** again resumes the optimal
+  solution from wherever the pieces are. The cursor reflects the mode: an
+  arrow over the board while the computer is playing; a pointer over the
+  towers when paused.
 - The header offers three colour themes (light / dark / grey); the choice
   is remembered.
 

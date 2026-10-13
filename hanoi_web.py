@@ -306,6 +306,7 @@ svg#board { width: 100%; max-width: 960px; height: auto; background: var(--board
 .disc { stroke: var(--disc-edge); stroke-width: 1; cursor: pointer; }
 .disc.selected { stroke: var(--accent); stroke-width: 3; }
 .disc.mover { pointer-events: none; }
+#board.playing .disc, #board.playing .hit { cursor: default; }
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
 .shake { animation: shake .3s ease-in-out 2; }
 dialog {
@@ -521,6 +522,7 @@ function updateHud() {
 }
 
 function updateButtons() {
+  $("board").classList.toggle("playing", state.mode === "auto");
   $("playBtn").textContent = state.mode === "auto" ? "Stop" : "Play";
   $("playBtn").disabled = isSolved();
 }
@@ -713,22 +715,17 @@ $("board").addEventListener("click", (e) => {
   const tgt = e.target.closest("[data-piece],[data-tower]");
   if (!tgt) return;
   if (tgt.dataset.piece !== undefined) {
-    const piece = +tgt.dataset.piece;
-    const t = towerOf(piece);
-    const isTop = state.towers[t][state.towers[t].length - 1] === piece;
+    const t = towerOf(+tgt.dataset.piece);
     if (state.selected >= 0) {
       const st = towerOf(state.selected);
       if (st !== t) { attemptMove(st, t); return; }
     }
-    if (!isTop) {
-      flash("Only the top piece of a tower can move.");
-      shakeEl(tgt);
-      return;
-    }
-    state.selected = piece === state.selected ? -1 : piece;
+    // Any disc in a tower picks up that tower's top piece.
+    const topPiece = state.towers[t][state.towers[t].length - 1];
+    state.selected = topPiece === state.selected ? -1 : topPiece;
     renderDiscs();
     setStatus(state.selected >= 0
-      ? `Piece ${state.selected} selected \u2014 click a tower to move it, or click it again to cancel.`
+      ? `Piece ${state.selected} selected \u2014 click a tower to move it, or click the tower again to cancel.`
       : idleText());
     return;
   }
