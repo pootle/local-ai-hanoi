@@ -13,7 +13,8 @@ Hard rules (duplicated in AGENTS.md):
 - Never comment on or close an issue before the fix is committed AND pushed.
 - Every issue comment cites the commit hash (short form) that fixes it.
 - `gh issue view` is broken on this repo (classic-projects GraphQL bug).
-  Use the REST API via `gh api` for all issue reads and writes.
+  Read and comment via `gh api` (REST). Closing via REST PUT 404s too —
+  use `gh issue close <n>`.
 
 ## 1. List
 
@@ -60,9 +61,9 @@ Fixed in <short-hash> — <one-line description of the fix>.
 <optional second line: tests added / behaviour notes>
 ```
 
-Post and close via the REST API:
+Post the comment via the REST API, then close with the CLI:
 
 ```
 gh api -X POST repos/pootle/local-ai-hanoi/issues/<n>/comments -f body="<comment>"
-gh api -X PUT repos/pootle/local-ai-hanoi/issues/<n> -f state=closed
+gh issue close <n>
 ```

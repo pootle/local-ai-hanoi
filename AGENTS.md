@@ -14,7 +14,7 @@ only — no new dependencies.
 - `gh` is authenticated for this repo (fine-grained token, issues: read/write).
 - `gh issue view` is broken on this repo (classic-projects GraphQL bug).
   Use `gh api repos/pootle/local-ai-hanoi/issues/<n>` for issue bodies and
-  other issue REST calls.
+  comments. Closing via REST PUT 404s — use `gh issue close <n>`.
 - When asked for open issues: list number + title (+ date) and wait for the
   user to pick one. Do not fetch bodies or investigate code before the pick.
 - Never comment on or close an issue before the fix is committed AND pushed.
